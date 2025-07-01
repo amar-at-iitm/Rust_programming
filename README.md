@@ -430,11 +430,215 @@ for number in (1..4).rev() {
 
 
 ## Chapter 7: Managing Growing Projects with Packages, Crates, and Modules
-### Packages and Crates
-### Defining Modules to Control Scope and Privacy
-### Paths for Referring to an Item in the Module Tree
-### Bringing Paths Into Scope with the use Keyword
-### Separating Modules into Different Files
+
+This chapter explores **Rust’s module system**, and how to organise code across files and directories using **modules**, **packages**, and **crates**.
+
+### 7.1 Packages and Crates
+
+#### What’s a Crate?
+
+* **Crate**: A binary or library unit of compilation.
+* Every Rust project is at least one **crate**:
+
+  * Binary Crate → has a `main` function.
+  * Library Crate → defines functions/types to be used elsewhere.
+
+#### What’s a Package?
+
+* A **Package** is a bundle that contains **zero or more crates** (one **binary** or **library** crate is required).
+* A package includes a `Cargo.toml` file that defines:
+
+  * Dependencies
+  * Project metadata
+  * Crate types
+
+#### Example Package Layout:
+
+```
+my_project/
+├── Cargo.toml      # defines package
+└── src/
+    ├── main.rs     # binary crate root (if present)
+    └── lib.rs      # library crate root (optional)
+```
+
+> ! A package can contain both `src/main.rs` and `src/lib.rs`, but **only one library crate**.
+
+
+### 7.2 Defining Modules to Control Scope and Privacy
+
+#### What’s a Module?
+
+* **Modules** allow logical grouping of code and control of **visibility** (public vs private).
+
+#### Declaring a Module:
+
+```rust
+mod sound {
+    fn guitar() {
+        // private by default
+    }
+}
+```
+
+#### Making Public:
+
+```rust
+pub mod sound {
+    pub fn guitar() {
+        println!("Playing guitar");
+    }
+}
+```
+
+* **`mod` keyword** defines a module.
+* **`pub` keyword** exposes the module or item to other scopes.
+
+#### Module Hierarchy:
+
+```rust
+mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+```
+
+To access `add_to_waitlist()`:
+
+```rust
+front_of_house::hosting::add_to_waitlist();
+```
+
+
+### 7.3 Paths for Referring to an Item in the Module Tree
+
+#### Absolute vs Relative Paths
+
+* **Absolute path**: Starts from the crate root
+
+  ```rust
+  crate::front_of_house::hosting::add_to_waitlist();
+  ```
+
+* **Relative path**: Starts from the current module
+
+  ```rust
+  self::hosting::add_to_waitlist();
+  ```
+
+#### Using `use` to Bring Paths into Scope
+
+```rust
+use crate::front_of_house::hosting;
+
+fn serve() {
+    hosting::add_to_waitlist();
+}
+```
+
+You can also shorten:
+
+```rust
+use crate::front_of_house::hosting::add_to_waitlist;
+```
+
+
+### 7.4 Bringing Paths into Scope with `use`
+
+#### Use Aliases:
+
+```rust
+use std::fmt::Result;
+use std::io::Result as IoResult;
+```
+
+> Useful when different crates have functions or types with the same name.
+
+#### Nested Paths:
+
+```rust
+use std::{cmp::Ordering, io};
+```
+
+#### Glob operator:
+
+```rust
+use std::collections::*;
+```
+
+* Imports **everything** in the module (use with care).
+
+
+### 7.5 Separating Modules into Different Files
+
+#### From Inline to File:
+
+```rust
+mod front_of_house;
+```
+
+If `mod front_of_house` is declared, Rust looks for:
+
+* `src/front_of_house.rs`, OR
+* `src/front_of_house/mod.rs`
+
+Within `front_of_house.rs`, submodules can be added:
+
+```rust
+pub mod hosting;
+```
+
+Rust expects this structure:
+
+```
+src/
+├── main.rs
+└── front_of_house/
+    ├── mod.rs
+    └── hosting.rs
+```
+
+This supports scalable file-based project organisation.
+
+
+
+## Practical Example (Structure and Access)
+
+### File Tree:
+
+```
+src/
+├── main.rs
+└── front_of_house/
+    ├── mod.rs
+    └── hosting.rs
+```
+
+### main.rs:
+
+```rust
+mod front_of_house;
+
+fn main() {
+    front_of_house::hosting::add_to_waitlist();
+}
+```
+
+### front\_of\_house/mod.rs:
+
+```rust
+pub mod hosting;
+```
+
+### front\_of\_house/hosting.rs:
+
+```rust
+pub fn add_to_waitlist() {
+    println!("Waitlist updated");
+}
+```
+
 
 ## Chapter 9: Error Handling
 ### Unrecoverable Errors with panic!
