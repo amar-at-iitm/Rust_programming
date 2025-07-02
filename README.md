@@ -641,6 +641,203 @@ pub fn add_to_waitlist() {
 
 
 ## Chapter 9: Error Handling
-### Unrecoverable Errors with panic!
-### Recoverable Errors with Result
-### To panic! or Not to panic!
+Rust’s error handling emphasises **safety and robustness**. Unlike some languages that rely heavily on exceptions, Rust uses **`Result` and `Option` types** to model errors explicitly.
+
+
+### 9.1 Unrecoverable Errors with `panic!`
+
+#### What is `panic!`?
+
+When something goes **seriously wrong**, Rust stops execution with:
+
+```rust
+panic!("Something went wrong");
+```
+
+* It prints an error message, unwinds the stack, and exits.
+
+#### Panic in Action:
+
+```rust
+fn main() {
+    panic!("Crash and burn!");
+}
+```
+
+You’ll see:
+
+```
+thread 'main' panicked at 'Crash and burn!', src/main.rs:2:5
+```
+
+#### Stack Unwinding vs Aborting:
+
+* **Unwinding**: Clean up by running destructors (default).
+* **Aborting**: Stops immediately, skips cleanup (faster, smaller binary).
+* Set in `Cargo.toml`:
+
+```toml
+[profile.release]
+panic = 'abort'
+```
+
+#### Common Causes:
+
+* Array indexing out of bounds:
+
+```rust
+let v = vec![1, 2, 3];
+v[99]; // Causes panic!
+```
+
+
+### 9.2 Recoverable Errors with `Result`
+
+#### The `Result` Enum:
+
+```rust
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+```
+
+Used when an operation **might fail**, like file I/O.
+
+#### Example:
+
+```rust
+use std::fs::File;
+
+fn main() {
+    let f = File::open("hello.txt");
+
+    let f = match f {
+        Ok(file) => file,
+        Err(error) => {
+            panic!("Problem opening file: {:?}", error);
+        }
+    };
+}
+```
+
+#### Handling Specific Errors:
+
+```rust
+use std::io::ErrorKind;
+
+let f = File::open("hello.txt");
+
+let f = match f {
+    Ok(file) => file,
+    Err(ref error) if error.kind() == ErrorKind::NotFound => {
+        match File::create("hello.txt") {
+            Ok(fc) => fc,
+            Err(e) => panic!("Couldn't create file: {:?}", e),
+        }
+    },
+    Err(error) => panic!("Problem opening file: {:?}", error),
+};
+```
+
+This is how you **recover from expected errors** (e.g., a missing file).
+
+
+### 9.3 Shortcuts for Panic on Errors: `unwrap` and `expect`
+
+#### `unwrap()`
+
+```rust
+let f = File::open("hello.txt").unwrap();
+```
+
+Panics if the file isn’t found.
+
+#### `expect()` with Custom Message
+
+```rust
+let f = File::open("hello.txt").expect("Failed to open hello.txt");
+```
+
+Useful when failure is rare and unrecoverable.
+
+
+### 9.4 Propagating Errors
+
+Instead of handling every error immediately, **functions can return errors** to their callers.
+
+#### Manual Propagation:
+
+```rust
+use std::fs::File;
+use std::io::{self, Read};
+
+fn read_username_from_file() -> Result<String, io::Error> {
+    let f = File::open("hello.txt");
+
+    let mut f = match f {
+        Ok(file) => file,
+        Err(e) => return Err(e),
+    };
+
+    let mut s = String::new();
+    match f.read_to_string(&mut s) {
+        Ok(_) => Ok(s),
+        Err(e) => Err(e),
+    }
+}
+```
+
+#### With the `?` Operator:
+
+```rust
+fn read_username_from_file() -> Result<String, io::Error> {
+    let mut f = File::open("hello.txt")?;
+    let mut s = String::new();
+    f.read_to_string(&mut s)?;
+    Ok(s)
+}
+```
+
+* `?` automatically returns `Err(e)` if something fails.
+* Works only in functions that return `Result`.
+
+#### Even More Concise:
+
+```rust
+fn read_username_from_file() -> Result<String, io::Error> {
+    std::fs::read_to_string("hello.txt")
+}
+```
+
+
+### 9.5 Using `?` with `Option`
+
+`?` also works with `Option`:
+
+```rust
+fn get_last_char(text: &str) -> Option<char> {
+    text.lines().next()?.chars().last()
+}
+```
+
+* If any step returns `None`, the function returns `None`.
+
+### 9.6 Guidelines for Error Handling
+
+#### When to Use `panic!`:
+
+* Examples, tests, and prototyping.
+* Unrecoverable bugs.
+* Violations of logic that shouldn't occur.
+
+#### When to Use `Result`:
+
+* For operations where failure is expected or possible:
+
+  * Network access
+  * File I/O
+  * Parsing
+
+Use `panic!` only for **truly exceptional conditions** that can’t or shouldn’t be handled by the caller.
+
