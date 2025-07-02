@@ -841,3 +841,220 @@ fn get_last_char(text: &str) -> Option<char> {
 
 Use `panic!` only for **truly exceptional conditions** that can’t or shouldn’t be handled by the caller.
 
+
+
+## Chapter 12: An I/O Project: Building a Command Line Program
+
+This chapter walks through building a **real-world Rust project**: a command-line program similar to Unix’s `grep`. It searches for lines in a file that match a given query string.
+
+It introduces key concepts like argument parsing, file handling, environment variables, and modularisation.
+
+
+### 12.1 Accepting Command Line Arguments
+
+The goal is to allow the user to call the program like this:
+
+```bash
+cargo run search_string file_name.txt
+```
+
+To read command-line arguments, use `std::env::args`:
+
+```rust
+use std::env;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    println!("{:?}", args);
+}
+```
+
+* `args[0]` is the program name.
+* `args[1]` is the search string.
+* `args[2]` is the file name.
+
+Instead of using `args` directly in `main`, it’s better practice to extract the parsing into a function.
+
+The recommended approach is to define a `Config` struct to hold parameters:
+
+```rust
+struct Config {
+    query: String,
+    filename: String,
+}
+```
+
+And a constructor method to parse the arguments:
+
+```rust
+impl Config {
+    fn new(args: &[String]) -> Config {
+        let query = args[1].clone();
+        let filename = args[2].clone();
+
+        Config { query, filename }
+    }
+}
+```
+
+---
+
+## 12.2 Reading a File
+
+Rust’s `std::fs` module provides file handling capabilities.
+
+```rust
+use std::fs;
+
+fn main() {
+    let contents = fs::read_to_string("file.txt")
+        .expect("Should have been able to read the file");
+    println!("File contents:\n{}", contents);
+}
+```
+
+`read_to_string` returns a `Result<String, Error>`.
+
+In the CLI program, reading the file will be part of the main logic after parsing arguments.
+
+---
+
+## 12.3 Refactoring to Improve Modularity and Error Handling
+
+To keep the `main` function clean and manageable:
+
+* Use a `run` function to encapsulate the main logic.
+* Handle `Result` instead of panicking.
+
+```rust
+fn main() {
+    let config = Config::new(&args);
+
+    if let Err(e) = run(config) {
+        eprintln!("Application error: {e}");
+        std::process::exit(1);
+    }
+}
+```
+
+The `run` function should return a `Result<(), Box<dyn Error>>`, allowing any error type to be returned.
+
+This pattern separates concerns:
+
+* `main` handles top-level logic and error reporting.
+* `run` does the work and can fail gracefully.
+
+---
+
+## 12.4 Developing the Library
+
+To scale, split the logic into a **library crate**:
+
+* Move `Config`, `run`, and `search` into `src/lib.rs`
+* Keep `main.rs` focused on program entry
+
+Example `lib.rs` structure:
+
+```rust
+pub struct Config { ... }
+
+impl Config {
+    pub fn new(...) -> Result<Config, &str> { ... }
+}
+
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> { ... }
+
+fn search(...) -> Vec<String> { ... }
+```
+
+`main.rs` now looks like:
+
+```rust
+use minigrep::Config;
+
+fn main() {
+    let config = Config::new(env::args()).unwrap_or_else(|err| {
+        eprintln!("Problem parsing arguments: {err}");
+        process::exit(1);
+    });
+
+    if let Err(e) = minigrep::run(config) {
+        eprintln!("Application error: {e}");
+        process::exit(1);
+    }
+}
+```
+
+---
+
+## 12.5 Working with Environment Variables
+
+The program is extended to support **case-insensitive search** using an environment variable:
+
+```bash
+CASE_INSENSITIVE=1 cargo run to poem.txt
+```
+
+Read the variable using:
+
+```rust
+env::var("CASE_INSENSITIVE").is_ok()
+```
+
+Adapt the search function accordingly:
+
+```rust
+pub fn search_case_insensitive(query: &str, contents: &str) -> Vec<String> {
+    let query = query.to_lowercase();
+    contents.lines()
+        .filter(|line| line.to_lowercase().contains(&query))
+        .map(|line| line.to_string())
+        .collect()
+}
+```
+
+Then use logic in `run()` to call the right function based on the variable.
+
+---
+
+## 12.6 Writing Tests
+
+Unit tests are added to `lib.rs`:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn case_sensitive() {
+        let query = "duct";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        assert_eq!(
+            vec!["safe, fast, productive."],
+            search(query, contents)
+        );
+    }
+
+    #[test]
+    fn case_insensitive() {
+        let query = "rUsT";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Trust me.";
+
+        assert_eq!(
+            vec!["Rust:", "Trust me."],
+            search_case_insensitive(query, contents)
+        );
+    }
+}
+```
+
+These tests verify the search behavior in both modes.
+
